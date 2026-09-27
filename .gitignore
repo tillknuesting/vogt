@@ -1,0 +1,3 @@
+/vogt
+*.test
+/testdata/fuzz-out/
