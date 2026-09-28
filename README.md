@@ -1,48 +1,84 @@
 # Vogt
 
-Vogt is a local broker that keeps credentials away from AI agents. An agent
-asks Vogt for access, a human approves it with Touch ID, and the agent calls
-the provider through Vogt's proxy, which adds the real credential for a few
-minutes. The agent never holds the key itself.
+Vogt keeps credentials away from AI agents. An agent asks Vogt for access.
+You approve it with Touch ID, or with a passkey on your phone. The agent then
+calls the provider through Vogt's local proxy, which adds the real key for a
+few minutes. The agent never holds the key.
 
-This repository is at milestone M0: the crypto foundations. There is no
-broker yet.
+## How it fits together
 
-## Rules this code follows
+- **Daemon** (`vogt daemon`): runs as its own OS user and owns the vault,
+  the policy, the audit log and the proxy.
+- **Helper** (`helper/`): a menu-bar app in your login session. It holds the
+  Secure Enclave keys, shows each request and asks for Touch ID.
+- **Agent side** (`vogt run`, `vogt grant`, `vogt exec`, `vogt mcp`): starts a
+  session, asks for grants and points tools at the proxy.
 
-- Go code uses the standard library only. `go.mod` has no `require` lines
-  and CI fails if one appears. There is no cgo.
-- The macOS helper will use only Apple's frameworks.
-- Secrets stored or passed between the daemon and the helper are protected
-  by a classical and a post-quantum algorithm together.
+A grant ends when the agent surrenders it, when its time runs out, when the
+session ends, or when you hit the kill switch (`vogt revoke --all` or the
+menu bar). The proxy stops accepting the token at once, and Vogt revokes the
+upstream credential where the provider allows it.
 
-## What M0 contains
+## Providers
 
-| Package | Purpose |
-| --- | --- |
-| `internal/wire` | Canonical binary encoding for everything signed or encrypted |
-| `internal/secmem` | Locked, guard-paged, wiped memory for secret bytes |
-| `internal/sig` | Composite ML-DSA-65 + ECDSA P-256 signatures |
-| `internal/envelope` | AES-256-GCM records and HPKE key wrapping (MLKEM768-P256, X-Wing) |
-| `internal/interop` | Test vectors shared with CryptoKit |
-| `cmd/vogt` | `vogt version` and `vogt selftest` |
+| Provider | How Vogt gets a credential | Modes |
+| --- | --- | --- |
+| Hugging Face, DeepSeek, OpenAI, Anthropic, Stripe, Slack | Stored API key, added to each proxied request | proxy |
+| GitHub | GitHub App installation token for one repository, revoked when the grant ends | proxy, direct |
+| Any OAuth 2.0 API | Access token from a stored refresh token | proxy |
+| Postgres | A login role per grant with only the policy's privileges, dropped at the end | direct |
 
-`spikes/cryptokit/interop.swift` checks the formats against CryptoKit on
-macOS 26. It verifies Go's signatures and opens Go's X-Wing wraps. It then
-signs with Secure Enclave ML-DSA-65 and P-256 keys and seals to a Go key, and
-the Go tests check the results.
+Hugging Face and DeepSeek have no API for creating keys on ordinary plans,
+so Vogt stores one key and never lets it leave the proxy. Tools that cannot
+change their base URL can use `HTTPS_PROXY` instead. Vogt then terminates TLS
+with a local CA that is name-constrained to the hosts in your policy.
 
-## Build and test
+## Security choices
 
-Needs Go 1.27 or later.
+- Go code uses the standard library only: no third-party modules, no cgo.
+  The helper uses Apple frameworks only.
+- Secrets are sealed with AES-256-GCM. Their keys are wrapped with hybrid
+  post-quantum HPKE (ML-KEM-768 + P-256) to Secure Enclave keys. High-tier
+  secrets need Touch ID for every grant; low-tier ones need one tap per login.
+- Approvals and the policy carry two signatures, ML-DSA-65 and ECDSA P-256,
+  and both must verify.
+- Every grant, approval, proxied call and revocation goes into a
+  hash-chained audit log with signed checkpoints.
+- Secrets in the daemon live in locked, guard-paged memory and are wiped
+  after use.
+
+## Getting started
+
+Needs Go 1.27 or later and macOS 26 for the helper.
 
 ```sh
-scripts/ci.sh                        # all CI gates; FUZZTIME=0 skips fuzzing
-go run ./cmd/vogt selftest
-swift spikes/cryptokit/interop.swift # macOS 26, then: go test ./internal/interop
+go build -o vogt ./cmd/vogt
+./vogt install --user "$USER"          # prints the plan; add --apply with sudo
+helper/build.sh                        # builds "Vogt Helper.app"
+"helper/build/Vogt Helper.app/Contents/MacOS/VogtHelper" --keys
+sudo vogt pair <bundle printed above>
+vogt policy init > policy.json         # edit, then:
+vogt policy load policy.json           # approve with Touch ID
+vogt secret add deepseek --provider static --tier high < key.txt
+vogt run -- claude                     # the agent runs in a session
 ```
 
-## Design
+Inside the session the agent runs `vogt grant deepseek.api` or
+`vogt exec deepseek.api default -- ./script`, or uses the tools from
+`vogt mcp`.
 
-The design spec and the implementation plan (milestones M0 to M4, crypto
-choices, test strategy) are in the project's design doc.
+For development without installing anything: `vogt daemon --dev` keeps its
+state in `~/.vogt-dev`, and `vogt helper-dev` is a software helper. Neither
+protects you from an agent running as the same user.
+
+## Checks
+
+```sh
+scripts/ci.sh      # stdlib-only check, gofmt, go fix, vet, tests (with a
+                   # goroutine-leak check), race, fuzzing, Linux and FIPS
+                   # builds, reproducible build, self-test
+helper/e2e.sh      # Swift helper with real Secure Enclave keys against a
+                   # dev daemon (macOS 26, local only)
+```
+
+The design spec and implementation plan are in the project's design doc.

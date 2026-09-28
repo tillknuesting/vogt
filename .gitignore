@@ -1,3 +1,4 @@
 /vogt
 *.test
 /testdata/fuzz-out/
+/helper/build/
