@@ -57,7 +57,7 @@ func TestMatch(t *testing.T) {
 		p, s string
 		want bool
 	}{
-		{"*", "", true}, {"gcp.*", "gcp.storage.read", true}, {"gcp.*", "github.x", false},
+		{"*", "", true}, {"github.*", "github.repo.read", true}, {"github.*", "deepseek.api", false},
 		{"*.admin", "cloud.admin", true}, {"a*b*c", "axxbyyc", true}, {"a*b*c", "axxbyy", false},
 		{"tillknuesting/*", "tillknuesting/vogt", true},
 	}

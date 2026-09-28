@@ -11,14 +11,17 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
+
+	"vogt/internal/install"
 )
 
-// Default locations. A system install uses /var/db/vogt and /var/run/vogt;
-// `vogt daemon --dev` uses ~/.vogt-dev.
-const (
-	systemStateDir = "/var/db/vogt"
-	systemRunDir   = "/var/run/vogt"
+// Default locations: those `vogt install` sets up, or ~/.vogt-dev for
+// `vogt daemon --dev`.
+var (
+	systemStateDir = install.PathsFor(runtime.GOOS).State
+	systemRunDir   = install.PathsFor(runtime.GOOS).Run
 )
 
 func devDir() string {

@@ -22,6 +22,7 @@ import (
 	"vogt/internal/audit"
 	"vogt/internal/grants"
 	"vogt/internal/helperlink"
+	"vogt/internal/peercred"
 	"vogt/internal/policy"
 	"vogt/internal/provider"
 	"vogt/internal/proxy"
@@ -89,7 +90,10 @@ type Daemon struct {
 	pairing   *helperlink.HelperKeys
 	bundles   map[bundleKey]*bundle
 	proxyBase string
+	ca        *proxy.CA
+	ph        *phone
 
+	done      chan struct{}
 	listeners []net.Listener
 	servers   []*http.Server
 	wg        sync.WaitGroup
@@ -115,7 +119,7 @@ func New(cfg Config) (*Daemon, error) {
 		return nil, fmt.Errorf("disable core dumps: %w", err)
 	}
 
-	d := &Daemon{cfg: cfg, log: cfg.Logger, sessions: session.NewRegistry(session.Limits{}), grants: grants.NewStore(), bundles: map[bundleKey]*bundle{}}
+	d := &Daemon{done: make(chan struct{}), cfg: cfg, log: cfg.Logger, sessions: session.NewRegistry(session.Limits{}), grants: grants.NewStore(), bundles: map[bundleKey]*bundle{}}
 	var err error
 	if d.identity, err = loadOrCreateIdentity(d.state(fileIdentity)); err != nil {
 		return nil, err
@@ -132,6 +136,9 @@ func New(cfg Config) (*Daemon, error) {
 	}
 	if err := d.loadPairing(); err != nil {
 		return nil, err
+	}
+	if err := d.loadPhone(); err != nil {
+		return nil, fmt.Errorf("webauthn credentials: %w", err)
 	}
 	var tiers vault.TierKeys
 	if d.pairing != nil {
@@ -160,6 +167,10 @@ func New(cfg Config) (*Daemon, error) {
 		transport = proxy.DefaultTransport()
 	}
 	d.proxy = &proxy.Proxy{Backend: d, Transport: transport}
+	d.proxy.Intercept = &proxy.Interceptor{Proxy: d.proxy, CA: d.currentCA}
+	if p := d.Policy(); p != nil {
+		d.ensureCA(p)
+	}
 	d.recover()
 	d.Audit("daemon.started", map[string]string{"identity": hex.EncodeToString(fp(d.identity.Public().Bytes()))})
 	return d, nil
@@ -226,14 +237,22 @@ func (d *Daemon) Start(api http.Handler) error {
 	d.mu.Unlock()
 	d.listeners = []net.Listener{apiL, helperL, proxyL}
 
-	apiSrv := &http.Server{Handler: api, ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 64 << 10}
+	apiSrv := &http.Server{Handler: api, ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 64 << 10, ConnContext: peercred.NewContext}
 	proxySrv := &http.Server{Handler: d.proxy, ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 64 << 10}
 	d.servers = []*http.Server{apiSrv, proxySrv}
-	d.wg.Add(3)
-	go func() { defer d.wg.Done(); apiSrv.Serve(apiL) }()
-	go func() { defer d.wg.Done(); d.helper.Serve(helperL) }()
-	go func() { defer d.wg.Done(); proxySrv.Serve(proxyL) }()
-	go d.housekeeping()
+	d.wg.Go(func() { apiSrv.Serve(apiL) })
+	d.wg.Go(func() { d.helper.Serve(helperL) })
+	d.wg.Go(func() { proxySrv.Serve(proxyL) })
+	if d.cfg.WebAuthnAddr != "" {
+		pl, psrv, err := d.startPhone(d.cfg.WebAuthnAddr)
+		if err != nil {
+			return err
+		}
+		d.listeners = append(d.listeners, pl)
+		d.servers = append(d.servers, psrv)
+		d.wg.Go(func() { psrv.Serve(pl) })
+	}
+	d.wg.Go(d.housekeeping)
 	d.log.Info("vogt daemon started", "api", apiL.Addr(), "proxy", d.proxyBase)
 	return nil
 }
@@ -262,6 +281,12 @@ func (d *Daemon) ProxyBase() string {
 
 // Close revokes every grant, stops serving and closes the audit log.
 func (d *Daemon) Close() error {
+	select {
+	case <-d.done:
+		return nil
+	default:
+		close(d.done)
+	}
 	d.RevokeAll("daemon stopping")
 	for _, s := range d.servers {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -279,9 +304,20 @@ func (d *Daemon) Close() error {
 func (d *Daemon) housekeeping() {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
-	for range t.C {
+	lastStale := time.Time{}
+	for {
+		select {
+		case <-d.done:
+			return
+		case <-t.C:
+		}
 		d.grants.Prune(24 * time.Hour)
 		d.expireBundles()
+		d.expireEnrollments()
+		if time.Since(lastStale) > 24*time.Hour {
+			d.remindStale()
+			lastStale = time.Now()
+		}
 	}
 }
 
@@ -411,6 +447,9 @@ func (d *Daemon) applyPolicy(p *policy.Policy) {
 	d.mu.Lock()
 	d.pol = p
 	d.mu.Unlock()
+	if d.proxy != nil {
+		d.ensureCA(p)
+	}
 	d.sessions.SetLimits(session.Limits{
 		MaxPendingPerSession: p.Limits.MaxPendingPerSession,
 		MaxPendingTotal:      p.Limits.MaxPendingTotal,
@@ -507,14 +546,14 @@ func policySummary(old, p *policy.Policy) string {
 	return b.String()
 }
 
-func (d *Daemon) askAdmin(ctx context.Context, display string, digest [32]byte) (*helperlink.Result, error) {
+func (d *Daemon) askAdmin(ctx context.Context, display string, digest [32]byte, deks ...helperlink.DEKRequest) (*helperlink.Result, error) {
 	d.mu.RLock()
 	paired := d.pairing != nil
 	d.mu.RUnlock()
 	if !paired {
 		return nil, ErrNotPaired
 	}
-	return d.helper.Ask(ctx, helperlink.Challenge{Kind: helperlink.KindAdmin, Display: display, Digest: digest}, d.approvalTimeout())
+	return d.helper.Ask(ctx, helperlink.Challenge{Kind: helperlink.KindAdmin, Display: display, Digest: digest, DEKs: deks}, d.approvalTimeout())
 }
 
 func (d *Daemon) approvalTimeout() time.Duration {
@@ -581,6 +620,69 @@ func (d *Daemon) DeleteSecret(ctx context.Context, id string) error {
 	return nil
 }
 
+// RotateSecret replaces a master secret through the provider's API, for
+// providers that have one. The human approves, which also unwraps the
+// current secret.
+func (d *Daemon) RotateSecret(ctx context.Context, id string) (vault.Meta, error) {
+	e, err := d.vault.Get(id)
+	if err != nil {
+		return vault.Meta{}, err
+	}
+	a, err := d.adapters.Get(e.Provider)
+	if err != nil {
+		return vault.Meta{}, err
+	}
+	rot, ok := a.(provider.Rotator)
+	if !ok {
+		return vault.Meta{}, fmt.Errorf("%s has no API for rotating keys: make a new key in its console, then run `vogt secret add %s` again", e.Provider, id)
+	}
+	req := helperlink.DEKRequest{Tier: e.Tier, Wrapped: e.Wraps[vault.WrapSE], AAD: vault.WrapAAD(e.ID, e.KeyVersion)}
+	res, err := d.askAdmin(ctx, fmt.Sprintf("ROTATE secret %q through the %s API", id, e.Provider), sha256.Sum256([]byte("vogt/v1/rotate/"+id)), req)
+	if err != nil {
+		return vault.Meta{}, err
+	}
+	defer res.Destroy()
+	if !res.Approved {
+		return vault.Meta{}, errors.New("the human denied the rotation")
+	}
+	master, err := vault.Decrypt(e, res.DEKs[0].Bytes())
+	if err != nil {
+		return vault.Meta{}, err
+	}
+	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	next, err := rot.Rotate(rctx, master.Bytes())
+	cancel()
+	master.Destroy()
+	if err != nil {
+		d.Audit("secret.rotate_failed", map[string]string{"secret": id, "reason": err.Error()})
+		return vault.Meta{}, err
+	}
+	m, err := d.vault.Put(id, e.Provider, e.Tier, next)
+	if err != nil {
+		// The provider already has the new secret; losing it here would lock
+		// us out, so say so loudly.
+		d.Audit("secret.rotate_failed", map[string]string{"secret": id, "reason": "rotated upstream but could not store: " + err.Error()})
+		return vault.Meta{}, err
+	}
+	d.Audit("secret.rotated", map[string]string{"secret": id, "version": strconv.FormatUint(m.KeyVersion, 10)})
+	return m, nil
+}
+
+// StaleAfter is the age after which a secret should be rotated.
+const StaleAfter = 90 * 24 * time.Hour
+
+func (d *Daemon) remindStale() {
+	list, err := d.vault.List()
+	if err != nil {
+		return
+	}
+	for _, m := range list {
+		if time.Since(m.Updated) > StaleAfter {
+			d.Audit("secret.stale", map[string]string{"secret": m.ID, "days": strconv.Itoa(int(time.Since(m.Updated).Hours() / 24))})
+		}
+	}
+}
+
 // Secrets lists stored secrets without their contents.
 func (d *Daemon) Secrets() ([]vault.Meta, error) { return d.vault.List() }
 
@@ -588,9 +690,14 @@ func (d *Daemon) Secrets() ([]vault.Meta, error) { return d.vault.List() }
 
 // CreateSession starts an agent session and returns its secret.
 func (d *Daemon) CreateSession(name string) (string, *session.Session) {
+	return d.CreateSessionFor(name, peercred.Cred{UID: -1, PID: -1})
+}
+
+// CreateSessionFor starts a session and records who asked for it.
+func (d *Daemon) CreateSessionFor(name string, peer peercred.Cred) (string, *session.Session) {
 	name = sanitize(name, 40)
 	tok, s := d.sessions.Create(name)
-	d.Audit("session.started", map[string]string{"session": s.ID, "name": name})
+	d.Audit("session.started", map[string]string{"session": s.ID, "name": name, "peer_pid": strconv.Itoa(peer.PID), "peer_uid": strconv.Itoa(peer.UID)})
 	return tok, s
 }
 

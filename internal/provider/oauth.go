@@ -14,7 +14,7 @@ import (
 )
 
 // OAuth refreshes an access token from a stored refresh token for APIs such
-// as Google Workspace or Microsoft Graph. The refresh token never leaves
+// that issue OAuth 2.0 refresh tokens. The refresh token never leaves
 // the broker, so this provider is proxy-only.
 //
 // The master secret is JSON: {"token_url": "...", "client_id": "...",
@@ -141,3 +141,29 @@ func (c *oauthCred) NewMaster() []byte {
 	c.newMaster = nil
 	return m
 }
+
+// bearerCred injects "Authorization: Bearer <token>".
+type bearerCred struct {
+	token   *secmem.Buffer
+	expires time.Time
+	envName string
+	// route maps the proxied path to an upstream base and path.
+	route func(rest string) (base, path string, err error)
+}
+
+func (c *bearerCred) Inject(r *http.Request, rest string) error {
+	base, path, err := c.route(rest)
+	if err != nil {
+		return err
+	}
+	if err := PointAt(r, base, path); err != nil {
+		return err
+	}
+	r.Header.Set("Authorization", "Bearer "+string(c.token.Bytes()))
+	return nil
+}
+
+func (c *bearerCred) Env() []string      { return []string{c.envName + "=" + string(c.token.Bytes())} }
+func (c *bearerCred) Handle() []byte     { return nil }
+func (c *bearerCred) Expires() time.Time { return c.expires }
+func (c *bearerCred) Wipe()              { c.token.Destroy() }

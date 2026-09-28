@@ -116,6 +116,7 @@ type env struct {
 	keys     *softhelper.Keys
 	approver *softhelper.Auto
 	client   *http.Client
+	helperC  net.Conn
 }
 
 func testPolicy(staticURL string) []byte {
@@ -133,7 +134,9 @@ func testPolicy(staticURL string) []byte {
 	return b
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+func newEnvWith(t *testing.T, tweak func(*Config)) *env {
 	t.Helper()
 	e := &env{t: t, gh: newFakeGitHub(t), staticIn: make(chan http.Header, 8), approver: &softhelper.Auto{Yes: true}}
 	e.static = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +168,9 @@ func newEnv(t *testing.T) *env {
 		"static": provider.Static{},
 	}
 	e.cfg = Config{StateDir: state, RunDir: filepath.Join(base, "run"), ProxyAddr: "127.0.0.1:0", Adapters: adapters, Transport: transport}
+	if tweak != nil {
+		tweak(&e.cfg)
+	}
 	e.start()
 
 	ctx := context.Background()
@@ -204,6 +210,7 @@ func (e *env) start() {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.helperC = c
 	go cl.Serve(c)
 	select {
 	case <-up:

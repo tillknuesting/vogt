@@ -314,30 +314,6 @@
         }
       ]
     },
-    "gcp.storage.read": {
-      "provider": "gcp",
-      "secret": "gcp-broker",
-      "route": "gcp",
-      "display": "READ gs://{target}",
-      "scope": {
-        "service_account": "agent-reader@example-project.iam.gserviceaccount.com",
-        "scopes": [
-          "https://www.googleapis.com/auth/devstorage.read_only"
-        ]
-      },
-      "allow": [
-        {
-          "methods": [
-            "GET"
-          ],
-          "path": "/storage.googleapis.com/storage/v1/b/{target}/**"
-        }
-      ],
-      "modes": [
-        "proxy",
-        "direct"
-      ]
-    },
     "db.orders.readonly": {
       "provider": "postgres",
       "secret": "orders-db",
@@ -377,11 +353,6 @@
       "max_bundle": "30m"
     },
     {
-      "capability": "gcp.*",
-      "decision": "ask",
-      "max_ttl": "10m"
-    },
-    {
       "capability": "*.admin",
       "decision": "deny"
     },
@@ -394,8 +365,6 @@
   "forbidden_permissions": [
     "github:administration=write",
     "github:secrets=write",
-    "github:workflows=write",
-    "gcp:cloud-platform",
-    "gcp:iam*"
+    "github:workflows=write"
   ]
 }

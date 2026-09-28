@@ -276,6 +276,17 @@ func (d *Daemon) approve(g *grants.Grant, rule policy.Rule, s *session.Session) 
 		ch.Kind = helperlink.KindUnwrap
 	}
 	res, err := d.helper.Ask(context.Background(), ch, d.approvalTimeout())
+	if errors.Is(err, helperlink.ErrNoHelper) && d.phoneReady(entry) {
+		// The Mac's helper is away: a passkey on the phone can approve.
+		if !tap {
+			if err := d.sessions.BeginPending(s); err != nil {
+				return nil, "", err
+			}
+		}
+		master, evidence, perr := d.askPhone(context.Background(), g.ID, g.Display, g.Digest, entry)
+		d.sessions.EndPending(s, perr != nil && strings.Contains(perr.Error(), "denied"))
+		return master, evidence, perr
+	}
 	if tap {
 		d.sessions.EndPending(s, err == nil && res != nil && !res.Approved)
 	}

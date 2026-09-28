@@ -222,3 +222,22 @@ func TestPostgresScopeRejectsInjection(t *testing.T) {
 }
 
 func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+func TestPostgresRotate(t *testing.T) {
+	f := newFakePG(t)
+	next, err := Postgres{}.Rotate(context.Background(), f.master())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	json.Unmarshal(next, &m)
+	if m["password"] == f.password || m["password"] == "" {
+		t.Fatal("password did not change")
+	}
+	f.mu.Lock()
+	q := f.queries[len(f.queries)-1]
+	f.mu.Unlock()
+	if !strings.HasPrefix(q, `ALTER ROLE "admin" PASSWORD 'SCRAM-SHA-256$4096:`) || strings.Contains(q, m["password"].(string)) {
+		t.Fatalf("query = %s", q)
+	}
+}

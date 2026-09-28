@@ -1,0 +1,11 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #1b1b1b; --muted: #5c5c5c; --line: #d8d8d8; --accent: #1f5fbf; }
+@media (prefers-color-scheme: dark) { :root { --bg: #141414; --fg: #ececec; --muted: #a8a8a8; --line: #333; --accent: #7fb0ff; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+main { max-width: 40rem; margin: 0 auto; padding: 1.5rem 1rem; }
+h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+.hint, #status { color: var(--muted); }
+.req { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+.req pre { white-space: pre-wrap; font: 14px/1.45 ui-monospace, Menlo, monospace; margin: 0 0 .75rem; }
+button { font: inherit; padding: .5rem 1rem; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
+button.approve { background: var(--accent); border-color: var(--accent); color: #fff; }
+input { font: inherit; padding: .35rem; }

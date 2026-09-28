@@ -73,6 +73,17 @@ if [ "$FUZZTIME" != "0" ]; then
 	done
 fi
 
+step "linux builds, with and without runtime/secret"
+GOOS=linux GOARCH=amd64 go vet ./...
+GOOS=linux GOARCH=arm64 GOEXPERIMENT=runtimesecret go vet ./...
+GOOS=linux GOARCH=amd64 GOEXPERIMENT=runtimesecret go build -o /dev/null ./cmd/vogt
+echo ok
+
+step "FIPS 140-3 module, strict mode"
+GOFIPS140=v1.26.0 go build -o "$tmp/fips" ./cmd/vogt
+GODEBUG=fips140=only "$tmp/fips" selftest >/dev/null
+echo ok
+
 step "reproducible build"
 go build -trimpath -o "$tmp/a" ./cmd/vogt
 go build -trimpath -o "$tmp/b" ./cmd/vogt

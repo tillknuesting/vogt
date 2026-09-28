@@ -223,3 +223,33 @@ func (c *pgCred) Wipe() {
 	c.password.Destroy()
 	c.master.Destroy()
 }
+
+// Rotate replaces the admin password with a fresh random one. The server
+// only ever sees its SCRAM verifier.
+func (Postgres) Rotate(ctx context.Context, master []byte) ([]byte, error) {
+	var m pgMaster
+	if err := json.Unmarshal(master, &m); err != nil || m.User == "" {
+		return nil, errors.New("postgres master secret needs host, user and password")
+	}
+	cfg, err := m.config()
+	if err != nil {
+		return nil, err
+	}
+	pw := make([]byte, 32)
+	rand.Read(pw)
+	newPassword := base64.RawURLEncoding.EncodeToString(pw)
+	verifier, err := ScramVerifier(newPassword)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := pgConnect(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	if err := conn.Exec("ALTER ROLE " + quoteIdent(m.User) + " PASSWORD " + quoteLit(verifier)); err != nil {
+		return nil, err
+	}
+	m.Password = newPassword
+	return json.Marshal(m)
+}

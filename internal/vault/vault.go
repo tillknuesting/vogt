@@ -211,21 +211,41 @@ func (s *Store) SetWrap(id, name string, wrapped []byte) error {
 	return s.write(e)
 }
 
+// DeleteWrap removes a named DEK wrap. The helper wrap cannot be removed.
+func (s *Store) DeleteWrap(id, name string) error {
+	if name == WrapSE {
+		return errors.New("vault: the helper wrap cannot be removed")
+	}
+	e, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	if _, ok := e.Wraps[name]; !ok {
+		return nil
+	}
+	delete(e.Wraps, name)
+	return s.write(e)
+}
+
 // Decrypt opens an entry's record with its DEK and returns the secret in
 // locked memory.
-func Decrypt(e *Entry, dek []byte) (*secmem.Buffer, error) {
-	h, pt, err := envelope.OpenRecord(dek, e.Record, e.ID)
-	if err != nil {
-		return nil, err
-	}
-	if h.KeyVersion != e.KeyVersion || h.Tier != e.Tier {
-		clear(pt)
-		return nil, envelope.ErrOpen
-	}
-	if len(pt) == 0 {
-		return nil, errors.New("vault: empty secret")
-	}
-	return secmem.FromBytes(pt)
+func Decrypt(e *Entry, dek []byte) (buf *secmem.Buffer, err error) {
+	secmem.Do(func() {
+		var h envelope.Header
+		var pt []byte
+		h, pt, err = envelope.OpenRecord(dek, e.Record, e.ID)
+		switch {
+		case err != nil:
+		case h.KeyVersion != e.KeyVersion || h.Tier != e.Tier:
+			clear(pt)
+			err = envelope.ErrOpen
+		case len(pt) == 0:
+			err = errors.New("vault: empty secret")
+		default:
+			buf, err = secmem.FromBytes(pt)
+		}
+	})
+	return buf, err
 }
 
 func (s *Store) write(e *Entry) error {

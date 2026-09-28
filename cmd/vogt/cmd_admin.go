@@ -47,7 +47,7 @@ func runStatus(args []string) error {
 
 func runSecret(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: vogt secret add|list|rm ...")
+		return errors.New("usage: vogt secret add|list|rotate|rm ...")
 	}
 	c := newClient()
 	switch args[0] {
@@ -70,7 +70,7 @@ func runSecret(args []string) error {
 		return tw.Flush()
 	case "add":
 		fs := newFlags("secret add", "NAME --provider P --tier high|low [--file F]")
-		prov := fs.String("provider", "", "provider: static, github, gcp, oauth, postgres")
+		prov := fs.String("provider", "", "provider: static, github, oauth, postgres")
 		tier := fs.String("tier", "high", "high: Touch ID for every grant; low: unlocked once per login")
 		file := fs.String("file", "", "read the secret from this file instead of stdin")
 		name, rest := splitName(args[1:])
@@ -105,6 +105,17 @@ func runSecret(args []string) error {
 			return err
 		}
 		fmt.Printf("stored %s (version %d)\n", m.ID, m.KeyVersion)
+		return nil
+	case "rotate":
+		if len(args) != 2 {
+			return errors.New("usage: vogt secret rotate NAME")
+		}
+		fmt.Fprintln(os.Stderr, "Approve on the helper (Touch ID)…")
+		var m vault.Meta
+		if err := c.do("POST", "/v1/admin/secrets/"+args[1]+"/rotate", nil, &m, approvalWait); err != nil {
+			return err
+		}
+		fmt.Printf("rotated %s (version %d)\n", m.ID, m.KeyVersion)
 		return nil
 	case "rm":
 		if len(args) != 2 {

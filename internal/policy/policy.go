@@ -67,7 +67,7 @@ type Policy struct {
 
 // Capability describes one thing an agent can ask for.
 type Capability struct {
-	Provider string `json:"provider"`           // github, gcp, postgres, oauth, static
+	Provider string `json:"provider"`           // github, postgres, oauth, static
 	Secret   string `json:"secret"`             // vault record holding the master credential
 	Route    string `json:"route"`              // proxy route name: base URL is /<route>
 	Upstream string `json:"upstream,omitempty"` // for static and oauth providers

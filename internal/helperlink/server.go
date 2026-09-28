@@ -264,12 +264,16 @@ func (s *Server) verify(keys *HelperKeys, ch *Challenge, replyKey hpke.PrivateKe
 		return nil, fmt.Errorf("helperlink: got %d DEKs, want %d", len(r.DEKs), len(ch.DEKs))
 	}
 	for i, w := range r.DEKs {
-		dek, err := envelope.Unwrap(replyKey, DEKReplyPurpose, DEKReplyAAD(ch.ID, i), w)
-		if err != nil {
-			res.Destroy()
-			return nil, errors.New("helperlink: returned DEK does not open")
-		}
-		buf, err := secmem.FromBytes(dek)
+		var buf *secmem.Buffer
+		var err error
+		secmem.Do(func() {
+			var dek []byte
+			if dek, err = envelope.Unwrap(replyKey, DEKReplyPurpose, DEKReplyAAD(ch.ID, i), w); err != nil {
+				err = errors.New("helperlink: returned DEK does not open")
+				return
+			}
+			buf, err = secmem.FromBytes(dek)
+		})
 		if err != nil {
 			res.Destroy()
 			return nil, err

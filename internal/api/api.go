@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"vogt/internal/daemon"
+	"vogt/internal/peercred"
 	"vogt/internal/session"
 )
 
@@ -43,10 +44,15 @@ func Handler(d *daemon.Daemon) http.Handler {
 	m.HandleFunc("GET /v1/admin/secrets", h.secrets)
 	m.HandleFunc("POST /v1/admin/secrets", h.addSecret)
 	m.HandleFunc("DELETE /v1/admin/secrets/{id}", h.deleteSecret)
+	m.HandleFunc("POST /v1/admin/secrets/{id}/rotate", h.rotateSecret)
 	m.HandleFunc("GET /v1/admin/policy", h.getPolicy)
 	m.HandleFunc("POST /v1/admin/policy", h.loadPolicy)
 	m.HandleFunc("POST /v1/admin/reload", h.reload)
 	m.HandleFunc("GET /v1/admin/audit/verify", h.verifyAudit)
+	m.HandleFunc("GET /v1/admin/ca", h.caCert)
+	m.HandleFunc("POST /v1/admin/webauthn/enroll", h.webauthnEnroll)
+	m.HandleFunc("GET /v1/admin/webauthn", h.webauthnList)
+	m.HandleFunc("DELETE /v1/admin/webauthn/{id}", h.webauthnRemove)
 	return m
 }
 
@@ -94,7 +100,7 @@ func (h *handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	secret, s := h.d.CreateSession(req.Name)
+	secret, s := h.d.CreateSessionFor(req.Name, peercred.FromContext(r.Context()))
 	writeJSON(w, http.StatusCreated, map[string]string{"id": s.ID, "secret": secret})
 }
 
@@ -308,4 +314,44 @@ func (h *handler) verifyAudit(w http.ResponseWriter, r *http.Request) {
 		out["error"] = err.Error()
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *handler) caCert(w http.ResponseWriter, r *http.Request) {
+	c, err := h.d.CACertPEM()
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Write(c)
+}
+
+func (h *handler) rotateSecret(w http.ResponseWriter, r *http.Request) {
+	m, err := h.d.RotateSecret(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeErr(w, http.StatusForbidden, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
+}
+
+func (h *handler) webauthnEnroll(w http.ResponseWriter, r *http.Request) {
+	u, err := h.d.StartEnroll(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusForbidden, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": u})
+}
+
+func (h *handler) webauthnList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.d.WebAuthnCredentials())
+}
+
+func (h *handler) webauthnRemove(w http.ResponseWriter, r *http.Request) {
+	if err := h.d.RemoveWebAuthn(r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

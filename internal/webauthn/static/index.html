@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vogt approvals</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<main>
+  <h1>Vogt approvals</h1>
+  <p class="hint">Approve with a passkey on your phone or a security key. Only approve requests you expect.</p>
+  <section id="enroll" hidden>
+    <h2>Add a passkey</h2>
+    <p>This passkey will be able to approve grants when the Touch ID helper is not running.</p>
+    <label>Name <input id="enroll-name" value="phone" maxlength="40"></label>
+    <button id="enroll-go">Create passkey</button>
+  </section>
+  <section id="pending"></section>
+  <p id="status" role="status"></p>
+</main>
+</body>
+</html>
