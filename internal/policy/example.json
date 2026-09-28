@@ -1,20 +1,156 @@
 {
   "version": 1,
   "capabilities": {
+    "hf.hub.read": {
+      "provider": "static",
+      "secret": "huggingface-read",
+      "route": "hf",
+      "upstream": "https://huggingface.co",
+      "display": "READ from the Hugging Face Hub",
+      "scope": {
+        "header": "Authorization",
+        "format": "Bearer {key}",
+        "base_env": "HF_ENDPOINT",
+        "key_env": "HF_TOKEN"
+      },
+      "allow": [
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/**"
+        },
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/**/resolve/**"
+        }
+      ],
+      "hosts": [
+        "huggingface.co"
+      ]
+    },
+    "hf.inference": {
+      "provider": "static",
+      "secret": "huggingface-inference",
+      "route": "hf-inference",
+      "upstream": "https://router.huggingface.co",
+      "display": "CALL Hugging Face Inference Providers",
+      "scope": {
+        "header": "Authorization",
+        "format": "Bearer {key}",
+        "base_env": "HF_INFERENCE_BASE_URL",
+        "base_suffix": "/v1",
+        "key_env": "HF_TOKEN"
+      },
+      "allow": [
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/v1/chat/completions"
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/v1/models"
+        }
+      ],
+      "hosts": [
+        "router.huggingface.co"
+      ]
+    },
+    "deepseek.api": {
+      "provider": "static",
+      "secret": "deepseek",
+      "route": "deepseek",
+      "upstream": "https://api.deepseek.com",
+      "display": "CALL the DeepSeek API",
+      "scope": {
+        "header": "Authorization",
+        "format": "Bearer {key}",
+        "base_env": "DEEPSEEK_BASE_URL",
+        "key_env": "DEEPSEEK_API_KEY"
+      },
+      "allow": [
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/chat/completions"
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/v1/chat/completions"
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/models"
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/user/balance"
+        }
+      ],
+      "hosts": [
+        "api.deepseek.com"
+      ]
+    },
     "github.repo.read": {
       "provider": "github",
       "secret": "github-read",
       "route": "github",
       "display": "READ github.com/{target}",
       "target": "*/*",
-      "scope": {"permissions": {"contents": "read", "metadata": "read", "pull_requests": "read"}},
+      "scope": {
+        "permissions": {
+          "contents": "read",
+          "metadata": "read",
+          "pull_requests": "read"
+        }
+      },
       "allow": [
-        {"methods": ["GET", "HEAD"], "path": "/api/repos/{target}/**"},
-        {"methods": ["GET", "HEAD"], "path": "/api/repos/{target}"},
-        {"methods": ["GET"], "path": "/git/{target}.git/info/refs"},
-        {"methods": ["POST"], "path": "/git/{target}.git/git-upload-pack"}
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/repos/{target}/**"
+        },
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/repos/{target}"
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/git/{target}.git/info/refs"
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/git/{target}.git/git-upload-pack"
+        }
       ],
-      "modes": ["proxy", "direct"]
+      "modes": [
+        "proxy",
+        "direct"
+      ]
     },
     "github.repo.push": {
       "provider": "github",
@@ -22,17 +158,64 @@
       "route": "github",
       "display": "PUSH to github.com/{target}",
       "target": "*/*",
-      "scope": {"permissions": {"contents": "write", "metadata": "read", "pull_requests": "write"}},
+      "scope": {
+        "permissions": {
+          "contents": "write",
+          "metadata": "read",
+          "pull_requests": "write"
+        }
+      },
       "allow": [
-        {"methods": ["GET", "HEAD"], "path": "/api/repos/{target}/**"},
-        {"methods": ["GET", "HEAD"], "path": "/api/repos/{target}"},
-        {"methods": ["POST", "PATCH"], "path": "/api/repos/{target}/pulls/**"},
-        {"methods": ["POST"], "path": "/api/repos/{target}/pulls"},
-        {"methods": ["GET"], "path": "/git/{target}.git/info/refs"},
-        {"methods": ["POST"], "path": "/git/{target}.git/git-upload-pack"},
-        {"methods": ["POST"], "path": "/git/{target}.git/git-receive-pack"}
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/repos/{target}/**"
+        },
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/repos/{target}"
+        },
+        {
+          "methods": [
+            "POST",
+            "PATCH"
+          ],
+          "path": "/api/repos/{target}/pulls/**"
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/api/repos/{target}/pulls"
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/git/{target}.git/info/refs"
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/git/{target}.git/git-upload-pack"
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/git/{target}.git/git-receive-pack"
+        }
       ],
-      "modes": ["proxy", "direct"]
+      "modes": [
+        "proxy",
+        "direct"
+      ]
     },
     "openai.api": {
       "provider": "static",
@@ -40,9 +223,25 @@
       "route": "openai",
       "upstream": "https://api.openai.com",
       "display": "CALL the OpenAI API",
-      "scope": {"header": "Authorization", "format": "Bearer {key}", "base_env": "OPENAI_BASE_URL", "base_suffix": "/v1", "key_env": "OPENAI_API_KEY"},
-      "allow": [{"methods": ["GET", "POST"], "path": "/v1/**"}],
-      "hosts": ["api.openai.com"]
+      "scope": {
+        "header": "Authorization",
+        "format": "Bearer {key}",
+        "base_env": "OPENAI_BASE_URL",
+        "base_suffix": "/v1",
+        "key_env": "OPENAI_API_KEY"
+      },
+      "allow": [
+        {
+          "methods": [
+            "GET",
+            "POST"
+          ],
+          "path": "/v1/**"
+        }
+      ],
+      "hosts": [
+        "api.openai.com"
+      ]
     },
     "anthropic.api": {
       "provider": "static",
@@ -50,9 +249,24 @@
       "route": "anthropic",
       "upstream": "https://api.anthropic.com",
       "display": "CALL the Anthropic API",
-      "scope": {"header": "x-api-key", "format": "{key}", "base_env": "ANTHROPIC_BASE_URL", "key_env": "ANTHROPIC_API_KEY"},
-      "allow": [{"methods": ["GET", "POST"], "path": "/v1/**"}],
-      "hosts": ["api.anthropic.com"]
+      "scope": {
+        "header": "x-api-key",
+        "format": "{key}",
+        "base_env": "ANTHROPIC_BASE_URL",
+        "key_env": "ANTHROPIC_API_KEY"
+      },
+      "allow": [
+        {
+          "methods": [
+            "GET",
+            "POST"
+          ],
+          "path": "/v1/**"
+        }
+      ],
+      "hosts": [
+        "api.anthropic.com"
+      ]
     },
     "stripe.readonly": {
       "provider": "static",
@@ -60,9 +274,23 @@
       "route": "stripe",
       "upstream": "https://api.stripe.com",
       "display": "READ Stripe data",
-      "scope": {"header": "Authorization", "format": "Bearer {key}", "base_env": "STRIPE_API_BASE", "key_env": "STRIPE_API_KEY"},
-      "allow": [{"methods": ["GET"], "path": "/v1/**"}],
-      "hosts": ["api.stripe.com"]
+      "scope": {
+        "header": "Authorization",
+        "format": "Bearer {key}",
+        "base_env": "STRIPE_API_BASE",
+        "key_env": "STRIPE_API_KEY"
+      },
+      "allow": [
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/v1/**"
+        }
+      ],
+      "hosts": [
+        "api.stripe.com"
+      ]
     },
     "slack.post": {
       "provider": "static",
@@ -70,22 +298,21 @@
       "route": "slack",
       "upstream": "https://slack.com",
       "display": "POST messages to Slack",
-      "scope": {"header": "Authorization", "format": "Bearer {key}", "base_env": "SLACK_API_URL", "base_suffix": "/api/", "key_env": "SLACK_BOT_TOKEN"},
-      "allow": [{"methods": ["POST"], "path": "/api/chat.postMessage"}]
-    },
-    "aws.s3.read": {
-      "provider": "aws",
-      "secret": "aws-broker",
-      "route": "aws",
-      "display": "READ s3://{target}",
       "scope": {
-        "role_arn": "arn:aws:iam::123456789012:role/vogt-agent",
-        "region": "eu-central-1",
-        "actions": ["s3:GetObject", "s3:ListBucket"],
-        "resources": ["arn:aws:s3:::{target}", "arn:aws:s3:::{target}/*"]
+        "header": "Authorization",
+        "format": "Bearer {key}",
+        "base_env": "SLACK_API_URL",
+        "base_suffix": "/api/",
+        "key_env": "SLACK_BOT_TOKEN"
       },
-      "allow": [{"methods": ["*"], "path": "/**"}],
-      "modes": ["proxy", "direct"]
+      "allow": [
+        {
+          "methods": [
+            "POST"
+          ],
+          "path": "/api/chat.postMessage"
+        }
+      ]
     },
     "gcp.storage.read": {
       "provider": "gcp",
@@ -94,32 +321,81 @@
       "display": "READ gs://{target}",
       "scope": {
         "service_account": "agent-reader@example-project.iam.gserviceaccount.com",
-        "scopes": ["https://www.googleapis.com/auth/devstorage.read_only"]
+        "scopes": [
+          "https://www.googleapis.com/auth/devstorage.read_only"
+        ]
       },
-      "allow": [{"methods": ["GET"], "path": "/storage.googleapis.com/storage/v1/b/{target}/**"}],
-      "modes": ["proxy", "direct"]
+      "allow": [
+        {
+          "methods": [
+            "GET"
+          ],
+          "path": "/storage.googleapis.com/storage/v1/b/{target}/**"
+        }
+      ],
+      "modes": [
+        "proxy",
+        "direct"
+      ]
     },
     "db.orders.readonly": {
       "provider": "postgres",
       "secret": "orders-db",
       "route": "orders-db",
       "display": "READ the orders database",
-      "scope": {"grants": ["USAGE ON SCHEMA orders", "SELECT ON ALL TABLES IN SCHEMA orders"]},
-      "modes": ["direct"]
+      "scope": {
+        "grants": [
+          "USAGE ON SCHEMA orders",
+          "SELECT ON ALL TABLES IN SCHEMA orders"
+        ]
+      },
+      "modes": [
+        "direct"
+      ]
     }
   },
   "rules": [
-    {"capability": "github.repo.read", "target": "tillknuesting/*", "decision": "allow", "max_ttl": "10m"},
-    {"capability": "github.repo.push", "target": "tillknuesting/*", "decision": "ask", "max_ttl": "10m", "deny_refs": ["refs/heads/main"], "max_bundle": "30m"},
-    {"capability": "aws.*", "decision": "ask", "max_ttl": "15m"},
-    {"capability": "*.admin", "decision": "deny"},
-    {"capability": "*", "decision": "ask", "max_ttl": "10m"}
+    {
+      "capability": "hf.hub.read",
+      "decision": "allow",
+      "max_ttl": "10m"
+    },
+    {
+      "capability": "github.repo.read",
+      "target": "tillknuesting/*",
+      "decision": "allow",
+      "max_ttl": "10m"
+    },
+    {
+      "capability": "github.repo.push",
+      "target": "tillknuesting/*",
+      "decision": "ask",
+      "max_ttl": "10m",
+      "deny_refs": [
+        "refs/heads/main"
+      ],
+      "max_bundle": "30m"
+    },
+    {
+      "capability": "gcp.*",
+      "decision": "ask",
+      "max_ttl": "10m"
+    },
+    {
+      "capability": "*.admin",
+      "decision": "deny"
+    },
+    {
+      "capability": "*",
+      "decision": "ask",
+      "max_ttl": "10m"
+    }
   ],
   "forbidden_permissions": [
-    "iam:*",
-    "sts:AssumeRole",
     "github:administration=write",
     "github:secrets=write",
-    "github:workflows=write"
+    "github:workflows=write",
+    "gcp:cloud-platform",
+    "gcp:iam*"
   ]
 }

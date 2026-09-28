@@ -11,7 +11,6 @@ import (
 
 	"vogt/internal/policy"
 	"vogt/internal/provider"
-	"vogt/internal/secmem"
 	"vogt/internal/wire"
 )
 
@@ -64,7 +63,6 @@ type Grant struct {
 	Evidence  []byte // hash of the approval signature, for the audit log
 
 	TokenHash [32]byte
-	VerifyKey *secmem.Buffer // AWS grants: the broker token, to check SigV4
 	Cred      provider.Credential
 
 	delivery *Delivery

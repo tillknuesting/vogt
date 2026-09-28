@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -80,10 +79,7 @@ func (d *Daemon) RequestGrant(s *session.Session, req GrantRequest) (*grants.Gra
 		d.Audit("grant.refused", fields)
 		return nil, ErrDenied
 	}
-	ttl := time.Duration(rule.MaxTTL)
-	if ttl > 10*time.Minute {
-		ttl = 10 * time.Minute
-	}
+	ttl := min(time.Duration(rule.MaxTTL), 10*time.Minute)
 	if req.TTL != "" {
 		v, err := time.ParseDuration(req.TTL)
 		if err != nil {
@@ -225,19 +221,9 @@ func (d *Daemon) process(g *grants.Grant, rule policy.Rule, s *session.Session) 
 	case policy.ModeProxy:
 		tok, h := token.New(token.Proxy)
 		g.TokenHash = h
-		if g.Provider == "aws" {
-			if g.VerifyKey, err = secmem.FromBytes([]byte(tok)); err != nil {
-				cred.Wipe()
-				fail(err.Error())
-				return
-			}
-		}
 		base := d.ProxyBase() + "/" + g.Route
 		delivery.Token, delivery.ProxyURL = tok, base
 		delivery.Env = a.ProxyEnv(g.Request, base, tok)
-		if g.Provider == "aws" {
-			delivery.Env = append(delivery.Env, "AWS_ACCESS_KEY_ID="+g.ID)
-		}
 	default:
 		delivery.Env = cred.Env()
 	}
@@ -367,9 +353,6 @@ func (d *Daemon) EndGrant(g *grants.Grant, state grants.State, reason string) {
 	cred := g.Cred
 	handle := cred.Handle()
 	defer cred.Wipe()
-	if g.VerifyKey != nil {
-		g.VerifyKey.Destroy()
-	}
 	f := map[string]string{"grant": g.ID, "state": string(state), "reason": reason}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	var err error
@@ -415,16 +398,6 @@ func (d *Daemon) GrantByID(id string) (*grants.Grant, bool) {
 		return nil, false
 	}
 	return g, true
-}
-
-func (d *Daemon) sigV4Grant(r *http.Request) (*grants.Grant, error) {
-	return provider.VerifySigV4Request(r, func(id string) (*grants.Grant, []byte, bool) {
-		g, ok := d.GrantByID(id)
-		if !ok || g.VerifyKey == nil {
-			return nil, nil, false
-		}
-		return g, g.VerifyKey.Bytes(), true
-	})
 }
 
 // --- bundles ---------------------------------------------------------------

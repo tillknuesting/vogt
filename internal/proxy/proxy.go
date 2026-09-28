@@ -17,7 +17,6 @@ import (
 
 	"vogt/internal/grants"
 	"vogt/internal/policy"
-	"vogt/internal/provider"
 	"vogt/internal/token"
 )
 
@@ -32,9 +31,6 @@ type Backend interface {
 type Proxy struct {
 	Backend   Backend
 	Transport http.RoundTripper
-	// SigV4 authenticates AWS-signed requests. It returns the grant whose ID
-	// is the access key and whose broker token signed the request.
-	SigV4 func(r *http.Request) (*grants.Grant, error)
 	// Intercept handles CONNECT for the TLS-interception fallback. Nil
 	// disables it.
 	Intercept http.Handler
@@ -85,9 +81,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	g, rest, err := p.Authorize(r)
 	if err != nil {
-		var he *httpError
 		code := http.StatusForbidden
-		if errors.As(err, &he) {
+		if he, ok := errors.AsType[*httpError](err); ok {
 			code = he.code
 		}
 		if code == http.StatusUnauthorized {
@@ -141,17 +136,6 @@ func (p *Proxy) Authorize(r *http.Request) (*grants.Grant, string, error) {
 }
 
 func (p *Proxy) grantFor(r *http.Request) (*grants.Grant, error) {
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "AWS4-HMAC-SHA256 ") {
-		if p.SigV4 == nil {
-			return nil, fail(http.StatusForbidden, "AWS signing is not enabled")
-		}
-		g, err := p.SigV4(r)
-		if err != nil {
-			return nil, fail(http.StatusForbidden, "%v", err)
-		}
-		return g, nil
-	}
 	tok := extractToken(r)
 	if tok == "" {
 		return nil, fail(http.StatusUnauthorized, "no broker token")
@@ -198,7 +182,7 @@ func safePath(r *http.Request) bool {
 	if !strings.HasPrefix(p, "/") || strings.Contains(p, "//") || strings.Contains(p, "\\") {
 		return false
 	}
-	for _, seg := range strings.Split(p, "/") {
+	for seg := range strings.SplitSeq(p, "/") {
 		if seg == "." || seg == ".." {
 			return false
 		}
@@ -225,11 +209,6 @@ func (p *Proxy) Forward(w http.ResponseWriter, r *http.Request, g *grants.Grant,
 			for k := range out.Header {
 				if strings.HasPrefix(strings.ToLower(k), "x-vogt-") {
 					out.Header.Del(k)
-				}
-			}
-			if g.Provider == "aws" {
-				if h, err := provider.ParseSigV4(pr.In.Header.Get("Authorization")); err == nil {
-					out.Header.Set("X-Vogt-Aws-Scope", h.Region+"/"+h.Service)
 				}
 			}
 			if err := g.Cred.Inject(out, rest); err != nil {

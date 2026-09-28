@@ -160,7 +160,6 @@ func New(cfg Config) (*Daemon, error) {
 		transport = proxy.DefaultTransport()
 	}
 	d.proxy = &proxy.Proxy{Backend: d, Transport: transport}
-	d.proxy.SigV4 = d.sigV4Grant
 	d.recover()
 	d.Audit("daemon.started", map[string]string{"identity": hex.EncodeToString(fp(d.identity.Public().Bytes()))})
 	return d, nil

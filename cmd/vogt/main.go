@@ -55,8 +55,7 @@ func main() {
 		os.Exit(2)
 	}
 	if err := cmd.run(flag.Args()[1:]); err != nil {
-		var ee exitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[exitError](err); ok {
 			os.Exit(int(ee))
 		}
 		fmt.Fprintln(os.Stderr, "vogt:", err)

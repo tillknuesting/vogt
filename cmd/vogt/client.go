@@ -93,8 +93,7 @@ func (c *client) do(method, path string, body, out any, timeout time.Duration) e
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		var ne *net.OpError
-		if errors.As(err, &ne) {
+		if ne, ok := errors.AsType[*net.OpError](err); ok {
 			return fmt.Errorf("cannot reach the daemon at %s; is `vogt daemon` running? (%v)", c.socket, ne.Err)
 		}
 		return err

@@ -70,7 +70,7 @@ func runSecret(args []string) error {
 		return tw.Flush()
 	case "add":
 		fs := newFlags("secret add", "NAME --provider P --tier high|low [--file F]")
-		prov := fs.String("provider", "", "provider: static, github, aws, gcp, oauth, postgres")
+		prov := fs.String("provider", "", "provider: static, github, gcp, oauth, postgres")
 		tier := fs.String("tier", "high", "high: Touch ID for every grant; low: unlocked once per login")
 		file := fs.String("file", "", "read the secret from this file instead of stdin")
 		name, rest := splitName(args[1:])

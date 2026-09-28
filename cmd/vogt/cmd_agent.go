@@ -63,8 +63,7 @@ func runChild(cmd *exec.Cmd) error {
 		}
 	}()
 	err := cmd.Wait()
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		return exitError(ee.ExitCode())
 	}
 	return err

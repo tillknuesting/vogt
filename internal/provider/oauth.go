@@ -47,7 +47,7 @@ func (o *OAuth) Permissions(req Request) ([]string, error) {
 		return nil, errors.New("oauth provider needs an upstream")
 	}
 	var out []string
-	for _, sc := range strings.Fields(s.Scope) {
+	for sc := range strings.FieldsSeq(s.Scope) {
 		out = append(out, "oauth:"+sc)
 	}
 	return out, nil
@@ -110,7 +110,7 @@ func (o *OAuth) Mint(ctx context.Context, req Request, master []byte) (Credentia
 	if err != nil {
 		return nil, err
 	}
-	cred := &oauthCred{bearerCred: bearerCred{token: tok, envName: "VOGT_OAUTH_TOKEN", route: fixedRoute(req.Upstream)}}
+	cred := &oauthCred{token: tok, envName: "VOGT_OAUTH_TOKEN", route: fixedRoute(req.Upstream)}
 	if out.ExpiresIn > 0 {
 		cred.expires = time.Now().Add(time.Duration(out.ExpiresIn) * time.Second)
 	}

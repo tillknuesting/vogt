@@ -36,11 +36,19 @@ if [ -n "$unformatted" ]; then
 fi
 echo ok
 
+step "go fix (code uses current Go idioms)"
+if ! go fix -diff ./... >"$tmp/fix.diff" 2>&1; then
+	cat "$tmp/fix.diff" >&2
+	echo "run: go fix ./..." >&2
+	exit 1
+fi
+echo ok
+
 step "go vet"
 go vet ./...
 echo ok
 
-step "go test"
+step "go test (every test binary also fails on leaked goroutines)"
 go test -count=1 ./...
 
 if CGO_ENABLED=1 go test -race -count=1 ./... >"$tmp/race.log" 2>&1; then

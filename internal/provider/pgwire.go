@@ -17,6 +17,7 @@ import (
 	"hash"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"time"
 )
@@ -267,12 +268,7 @@ type scramClient struct {
 
 func newScram(password string, mechs []string, tlsConn *tls.Conn) (*scramClient, error) {
 	has := func(m string) bool {
-		for _, x := range mechs {
-			if x == m {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(mechs, m)
 	}
 	s := &scramClient{password: password}
 	switch {
@@ -326,7 +322,7 @@ func (s *scramClient) clientFirst() string {
 func (s *scramClient) clientFinal(serverFirst string) (string, error) {
 	var nonce, salt64 string
 	iter := 0
-	for _, part := range strings.Split(serverFirst, ",") {
+	for part := range strings.SplitSeq(serverFirst, ",") {
 		k, v, _ := strings.Cut(part, "=")
 		switch k {
 		case "r":

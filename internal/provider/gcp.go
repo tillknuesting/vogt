@@ -119,10 +119,7 @@ func (g *GCP) Mint(ctx context.Context, req Request, master []byte) (Credential,
 		return nil, fmt.Errorf("gcp: broker token: %w", err)
 	}
 
-	secs := int(req.TTL.Seconds())
-	if secs > 3600 {
-		secs = 3600
-	}
+	secs := min(int(req.TTL.Seconds()), 3600)
 	body, _ := json.Marshal(map[string]any{"scope": s.Scopes, "lifetime": fmt.Sprintf("%ds", secs)})
 	base := g.CredsEndpoint
 	if base == "" {

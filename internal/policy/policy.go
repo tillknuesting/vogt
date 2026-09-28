@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -66,7 +67,7 @@ type Policy struct {
 
 // Capability describes one thing an agent can ask for.
 type Capability struct {
-	Provider string `json:"provider"`           // github, aws, gcp, postgres, oauth, static
+	Provider string `json:"provider"`           // github, gcp, postgres, oauth, static
 	Secret   string `json:"secret"`             // vault record holding the master credential
 	Route    string `json:"route"`              // proxy route name: base URL is /<route>
 	Upstream string `json:"upstream,omitempty"` // for static and oauth providers
@@ -173,10 +174,8 @@ func (p *Policy) validate() error {
 			return fmt.Errorf("rule %d: max_bundle must be at most 4h", i)
 		}
 	}
-	for _, f := range p.Forbidden {
-		if f == "" {
-			return errors.New("empty forbidden permission")
-		}
+	if slices.Contains(p.Forbidden, "") {
+		return errors.New("empty forbidden permission")
 	}
 	l := &p.Limits
 	setDefault(&l.MaxPendingPerSession, 1)
@@ -227,16 +226,11 @@ func (c Capability) AllowsMode(m Mode) bool {
 	if len(c.Modes) == 0 {
 		return m == ModeProxy
 	}
-	for _, x := range c.Modes {
-		if x == m {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Modes, m)
 }
 
 // CheckForbidden fails if any permission overlaps a forbidden one. Either
-// side may use * wildcards; comparison ignores case, as AWS does.
+// side may use * wildcards; comparison ignores case.
 func (p *Policy) CheckForbidden(perms []string) error {
 	for _, have := range perms {
 		for _, bad := range p.Forbidden {
